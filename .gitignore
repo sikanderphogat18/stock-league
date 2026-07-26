@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.db
+.env
+
+# Node / Vite
+node_modules/
+dist/
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
