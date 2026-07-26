@@ -31,9 +31,13 @@ export const api = {
   me: () => req("/api/me"),
   search: (q) => req(`/api/search?q=${encodeURIComponent(q)}`),
   quote: (symbol) => req(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
+  candles: (symbol) => req(`/api/candles?symbol=${encodeURIComponent(symbol)}`),
   buy: (symbol, shares) => req("/api/trade/buy", { method: "POST", body: { symbol, shares } }),
   sell: (symbol, shares) => req("/api/trade/sell", { method: "POST", body: { symbol, shares } }),
   portfolio: () => req("/api/portfolio"),
   trades: () => req("/api/trades"),
   leaderboard: () => req("/api/leaderboard"),
+  derivatives: () => req("/api/derivatives"),
+  openDerivative: (d) => req("/api/derivatives/open", { method: "POST", body: d }),
+  closeDerivative: (id) => req("/api/derivatives/close", { method: "POST", body: { position_id: id } }),
 };

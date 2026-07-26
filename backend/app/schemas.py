@@ -17,3 +17,15 @@ class LoginRequest(BaseModel):
 class TradeRequest(BaseModel):
     symbol: str
     shares: float
+
+
+class OpenDerivativeRequest(BaseModel):
+    kind: str           # "future" or "option"
+    direction: str      # long/short or call/put
+    symbol: str
+    leverage: float
+    margin: float       # cash to post (future) or premium to pay (option)
+
+
+class CloseDerivativeRequest(BaseModel):
+    position_id: int

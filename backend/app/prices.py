@@ -18,6 +18,10 @@ _cache: dict[str, tuple[float, float]] = {}  # symbol -> (price, unix_ts)
 _lock = threading.Lock()
 _DEFAULT_MAX_AGE = 15.0  # seconds a cached price is considered fresh enough to trade on
 
+_candle_cache: dict[str, tuple[list, float]] = {}  # symbol -> (candles, unix_ts)
+_candle_lock = threading.Lock()
+_CANDLE_TTL = 3600.0  # daily history barely changes intraday, so cache for an hour
+
 
 def _fetch(symbol: str) -> float:
     if not settings.finnhub_api_key:
@@ -94,6 +98,59 @@ def search_symbols(query: str, limit: int = 8):
 
     cleaned.sort(key=rank)
     return cleaned[:limit]
+
+
+def _parse_stooq_csv(text: str) -> list:
+    """Parse Stooq's daily CSV (Date,Open,High,Low,Close,Volume) into candle dicts."""
+    lines = [ln for ln in text.strip().splitlines() if ln]
+    if not lines or not lines[0].lower().startswith("date"):
+        return []  # empty, rate-limited, or "N/D" response
+    candles = []
+    for line in lines[1:]:
+        parts = line.split(",")
+        if len(parts) < 6:
+            continue
+        try:
+            candles.append({
+                "date": parts[0],
+                "open": float(parts[1]),
+                "high": float(parts[2]),
+                "low": float(parts[3]),
+                "close": float(parts[4]),
+                "volume": float(parts[5]),
+            })
+        except ValueError:
+            continue  # skip header repeats or blank cells
+    return candles
+
+
+def get_candles(symbol: str, days: int = 180) -> list:
+    """Return the last `days` trading days of daily OHLCV for a US ticker.
+
+    Finnhub moved historical candles behind its paid tier, so this pulls from
+    Stooq's free public CSV (no key needed). Results are cached for an hour.
+    """
+    symbol = symbol.upper()
+    now = time.time()
+    with _candle_lock:
+        cached = _candle_cache.get(symbol)
+    if cached and now - cached[1] <= _CANDLE_TTL:
+        return cached[0]
+
+    resp = httpx.get(
+        "https://stooq.com/q/d/l/",
+        params={"s": f"{symbol.lower()}.us", "i": "d"},
+        timeout=15.0,
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    resp.raise_for_status()
+    candles = _parse_stooq_csv(resp.text)
+    if not candles:
+        raise ValueError(f"No history available for '{symbol}'")
+    candles = candles[-days:]
+    with _candle_lock:
+        _candle_cache[symbol] = (candles, now)
+    return candles
 
 
 def refresh_symbols(symbols) -> None:
