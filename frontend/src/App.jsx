@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { api, getToken, setToken, clearToken } from "./api";
 
 /* ------------------------------ helpers ------------------------------ */
@@ -141,25 +141,81 @@ function StatCard({ label, value, tone }) {
 }
 
 function TradePanel({ onDone }) {
-  const [symbol, setSymbol] = useState("");
+  const [query, setQuery] = useState("");     // what's typed in the box (name or ticker)
+  const [symbol, setSymbol] = useState("");   // the confirmed ticker to trade
   const [shares, setShares] = useState("");
   const [quote, setQuote] = useState(null);
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  async function lookup() {
-    setMsg(null); setQuote(null);
-    if (!symbol) return;
+  const [results, setResults] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const boxRef = useRef(null);
+  const skipNextSearch = useRef(false);       // don't re-search right after picking a result
+
+  // debounced company/ticker search as the user types
+  useEffect(() => {
+    if (skipNextSearch.current) { skipNextSearch.current = false; return; }
+    const q = query.trim();
+    if (q.length < 1) { setResults([]); setOpen(false); return; }
+    const id = setTimeout(async () => {
+      try {
+        const r = await api.search(q);
+        setResults(r);
+        setOpen(r.length > 0);
+        setHighlight(0);
+      } catch (_) { /* ignore transient search errors */ }
+    }, 250);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  // close the dropdown when clicking outside
+  useEffect(() => {
+    const onClick = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  async function pick(match) {
+    skipNextSearch.current = true;
+    setQuery(`${match.symbol} · ${match.description}`);
+    setSymbol(match.symbol);
+    setResults([]); setOpen(false); setMsg(null);
     try {
-      setQuote(await api.quote(symbol));
+      setQuote(await api.quote(match.symbol));
     } catch (e) {
       setMsg({ type: "err", text: e.message });
+    }
+  }
+
+  // typing a ticker directly and pressing Enter (no dropdown selection)
+  async function lookupTyped() {
+    const s = query.trim().split(" ")[0].toUpperCase();
+    if (!s) return;
+    setSymbol(s); setOpen(false); setMsg(null);
+    try {
+      setQuote(await api.quote(s));
+    } catch (e) {
+      setMsg({ type: "err", text: e.message }); setQuote(null);
+    }
+  }
+
+  function onKeyDown(e) {
+    if (open && results.length) {
+      if (e.key === "ArrowDown") { e.preventDefault(); setHighlight((h) => (h + 1) % results.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => (h - 1 + results.length) % results.length); return; }
+      if (e.key === "Enter") { e.preventDefault(); pick(results[highlight]); return; }
+      if (e.key === "Escape") { setOpen(false); return; }
+    } else if (e.key === "Enter") {
+      lookupTyped();
     }
   }
 
   async function trade(side) {
     setMsg(null); setBusy(true);
     try {
+      if (!symbol) throw new Error("Pick a stock first");
       const n = parseFloat(shares);
       if (!n || n <= 0) throw new Error("Enter a share amount");
       const r = side === "buy" ? await api.buy(symbol, n) : await api.sell(symbol, n);
@@ -179,17 +235,35 @@ function TradePanel({ onDone }) {
     <div className="bg-panel border border-edge rounded-xl p-4">
       <div className="text-sm font-medium mb-3">Trade</div>
       <div className="flex flex-wrap gap-2 items-end">
-        <div>
-          <span className="text-xs text-gray-500">Ticker</span>
+        <div className="relative" ref={boxRef}>
+          <span className="text-xs text-gray-500">Company or ticker</span>
           <input
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === "Enter" && lookup()}
-            placeholder="AAPL"
-            className="mt-1 w-28 bg-ink border border-edge rounded-lg px-3 py-2 text-sm font-mono uppercase outline-none focus:border-gold"
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setSymbol(""); setQuote(null); }}
+            onKeyDown={onKeyDown}
+            onFocus={() => results.length && setOpen(true)}
+            placeholder="Apple or AAPL"
+            className="mt-1 w-64 bg-ink border border-edge rounded-lg px-3 py-2 text-sm outline-none focus:border-gold"
           />
+          {open && (
+            <ul className="absolute z-20 mt-1 w-72 max-h-64 overflow-auto bg-panel border border-edge rounded-lg shadow-xl">
+              {results.map((r, i) => (
+                <li
+                  key={r.symbol}
+                  onMouseDown={(e) => { e.preventDefault(); pick(r); }}
+                  onMouseEnter={() => setHighlight(i)}
+                  className={`px-3 py-2 cursor-pointer flex items-center gap-2 ${
+                    i === highlight ? "bg-edge" : ""
+                  }`}
+                >
+                  <span className="font-mono font-semibold text-sm w-16 shrink-0">{r.symbol}</span>
+                  <span className="text-xs text-gray-400 truncate">{r.description}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <button onClick={lookup} className="px-3 py-2 rounded-lg border border-edge text-sm hover:border-gold">
+        <button onClick={lookupTyped} className="px-3 py-2 rounded-lg border border-edge text-sm hover:border-gold">
           Get price
         </button>
         {quote && (

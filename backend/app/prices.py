@@ -56,6 +56,46 @@ def cached_price(symbol: str):
     return cached[0] if cached else None
 
 
+def search_symbols(query: str, limit: int = 8):
+    """Look up tickers by company name or symbol (e.g. 'apple' -> AAPL).
+
+    Uses Finnhub's /search endpoint and cleans the results for a US-stock game:
+    drops foreign / exchange-suffixed symbols (those with '.' or ':'), and puts
+    exact and prefix matches first so the obvious pick is at the top.
+    """
+    if not settings.finnhub_api_key:
+        raise RuntimeError("FINNHUB_API_KEY is not set (see backend/.env)")
+    resp = httpx.get(
+        "https://finnhub.io/api/v1/search",
+        params={"q": query, "token": settings.finnhub_api_key},
+        timeout=10.0,
+    )
+    resp.raise_for_status()
+    raw = resp.json().get("result", [])
+
+    q = query.strip().upper()
+    cleaned = []
+    for row in raw:
+        symbol = (row.get("symbol") or "").upper()
+        description = row.get("description") or ""
+        if not symbol or not description:
+            continue
+        if "." in symbol or ":" in symbol:  # skip foreign / suffixed listings
+            continue
+        cleaned.append({"symbol": symbol, "description": description.title(), "type": row.get("type") or ""})
+
+    def rank(item):
+        sym = item["symbol"]
+        if sym == q:
+            return 0
+        if sym.startswith(q):
+            return 1
+        return 2
+
+    cleaned.sort(key=rank)
+    return cleaned[:limit]
+
+
 def refresh_symbols(symbols) -> None:
     """Refresh a batch of symbols; used by the background scheduler."""
     for symbol in set(s.upper() for s in symbols):

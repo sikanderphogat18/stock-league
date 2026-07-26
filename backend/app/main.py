@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .database import Base, SessionLocal, engine, get_db
 from .models import Holding, Snapshot, Trade, User
-from .prices import cached_price, get_price, refresh_symbols
+from .prices import cached_price, get_price, refresh_symbols, search_symbols
 from .schemas import LoginRequest, RegisterRequest, TradeRequest
 from .security import create_token, get_current_user, hash_password, verify_password
 
@@ -151,6 +151,14 @@ def me(user: User = Depends(get_current_user)):
 
 
 # --------------------------------- market ----------------------------------
+
+@app.get("/api/search")
+def search(q: str = Query(..., min_length=1), _: User = Depends(get_current_user)):
+    try:
+        return search_symbols(q)
+    except Exception as exc:
+        raise HTTPException(400, f"Search failed: {exc}")
+
 
 @app.get("/api/quote")
 def quote(symbol: str = Query(...), _: User = Depends(get_current_user)):

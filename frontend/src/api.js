@@ -29,6 +29,7 @@ export const api = {
   register: (d) => req("/api/auth/register", { method: "POST", body: d, auth: false }),
   login: (d) => req("/api/auth/login", { method: "POST", body: d, auth: false }),
   me: () => req("/api/me"),
+  search: (q) => req(`/api/search?q=${encodeURIComponent(q)}`),
   quote: (symbol) => req(`/api/quote?symbol=${encodeURIComponent(symbol)}`),
   buy: (symbol, shares) => req("/api/trade/buy", { method: "POST", body: { symbol, shares } }),
   sell: (symbol, shares) => req("/api/trade/sell", { method: "POST", body: { symbol, shares } }),
