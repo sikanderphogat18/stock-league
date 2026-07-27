@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: stock-league-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Auto-generated random secret for signing login tokens
+      - key: JWT_SECRET
+        generateValue: true
+      - key: STARTING_CAPITAL
+        value: "100000"
+      # "*" lets your frontend talk to the API without extra setup.
+      # To lock it down later, set this to your Vercel URL.
+      - key: CORS_ORIGINS
+        value: "*"
+      # You'll be prompted for these three when you deploy the blueprint:
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: LEAGUE_INVITE_CODE
+        sync: false
+      # Paste your Neon (or other) Postgres connection string here
+      - key: DATABASE_URL
+        sync: false
