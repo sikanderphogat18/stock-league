@@ -7,6 +7,9 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      # Pin Python: 3.13/3.14 lack prebuilt wheels for some pinned deps
+      - key: PYTHON_VERSION
+        value: "3.12.6"
       # Auto-generated random secret for signing login tokens
       - key: JWT_SECRET
         generateValue: true
